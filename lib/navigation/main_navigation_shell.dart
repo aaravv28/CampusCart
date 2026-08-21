@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../features/listings/screens/home_feed_screen.dart';
 import '../features/listings/screens/add_item_screen.dart';
+import '../features/search/screens/search_screen.dart';
+import '../features/profile/screens/profile_screen.dart';
 
 class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
@@ -14,10 +16,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
   final List<Widget> _screens = [
     const HomeFeedScreen(),
-    const Center(child: Text("🔍 Search & Filter")),
+    const SearchScreen(),
     const AddItemScreen(), // 👈 Replaced sell placeholder with actual screen
     const Center(child: Text("💬 Messages")),
-    const Center(child: Text("👤 Profile")),
+    const ProfileScreen(),
   ];
 
   @override

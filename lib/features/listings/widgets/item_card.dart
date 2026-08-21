@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../screens/item_detail_screen.dart';
 
 class ItemCard extends StatelessWidget {
   final String title;
@@ -16,7 +17,23 @@ class ItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ItemDetailScreen(
+              title: title,
+              price: price,
+              courseCode: courseCode,
+              condition: condition,
+            ),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Card(
+
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
@@ -62,6 +79,7 @@ class ItemCard extends StatelessWidget {
           ),
         ],
       ),
+    )
     );
   }
 }

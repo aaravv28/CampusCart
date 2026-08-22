@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'core/theme/app_theme.dart';
+
 import 'features/auth/screens/login_screen.dart';
 
 void main() {
@@ -12,9 +12,14 @@ class CampusCartApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Campus Cart',
+      title: 'CampusCart',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+        ),
+        useMaterial3: true,
+      ),
       home: const LoginScreen(),
     );
   }

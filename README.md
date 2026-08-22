@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # campus_cart
 
 A new Flutter project.
@@ -15,3 +16,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# CampusCart
+A Flutter-based campus marketplace for college students to buy and sell items easily and securely.
+>>>>>>> 3984d8d4b8f76825dab3702aa5c633a34371c266

@@ -43,14 +43,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  // Logout
+  // Logout and return to Login Screen
   void _logout() {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
         builder: (context) => const LoginScreen(),
       ),
-          (route) => false,
+      (route) => false,
     );
   }
 
@@ -58,32 +58,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("My Profile"),
+        title: const Text(
+          "My Profile 👤",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: [
           IconButton(
             onPressed: _editProfile,
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.edit_outlined),
             tooltip: "Edit Profile",
           ),
         ],
       ),
 
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
             // Profile Avatar
             const CircleAvatar(
-              radius: 55,
+              radius: 50,
+              backgroundColor: Color(0xFF0F52BA),
               child: Icon(
                 Icons.person,
-                size: 60,
+                size: 55,
+                color: Colors.white,
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // Name
+            // User Name
             Text(
               name,
               style: const TextStyle(
@@ -94,15 +101,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 6),
 
-            // Email
-            const Text(
+            // College Email
+            Text(
               "student@college.edu",
               style: TextStyle(
-                color: Colors.grey,
+                color: Colors.grey.shade600,
               ),
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
+
+            // User Statistics
+            Container(
+              padding: const EdgeInsets.symmetric(
+                vertical: 16,
+                horizontal: 24,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Column(
+                    children: [
+                      Text(
+                        "1",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        "Active Listings",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        "1",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        "Items Sold",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
 
             // Department
             _ProfileItem(
@@ -125,9 +189,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value: contactPreference,
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
 
-            // Active Listings
+            // Active Listings Heading
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -141,9 +205,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 12),
 
+            // Active Listing Example
             const Card(
               child: ListTile(
-                leading: Icon(Icons.menu_book),
+                leading: Icon(
+                  Icons.menu_book,
+                ),
                 title: Text(
                   "Data Structures Textbook",
                 ),
@@ -156,9 +223,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
 
-            // Past Selling History
+            // Selling History Heading
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -172,6 +239,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 12),
 
+            // Sold Item Example
             const Card(
               child: ListTile(
                 leading: Icon(
@@ -186,25 +254,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 16),
 
-            // Logout Button
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton.icon(
-                onPressed: _logout,
-                icon: const Icon(
-                  Icons.logout,
-                ),
-                label: const Text(
-                  "Log Out",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+            // Saved Items
+            ListTile(
+              leading: const Icon(
+                Icons.favorite_border,
+              ),
+              title: const Text(
+                "Saved Items",
+              ),
+              trailing: const Icon(
+                Icons.chevron_right,
+              ),
+              onTap: () {
+                // Saved items functionality can be added later
+              },
+            ),
+
+            // College Verification
+            ListTile(
+              leading: const Icon(
+                Icons.verified_user_outlined,
+              ),
+              title: const Text(
+                "College Verification Status",
+              ),
+              trailing: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+              ),
+              onTap: () {},
+            ),
+
+            const Divider(
+              height: 32,
+            ),
+
+            // Logout
+            ListTile(
+              leading: const Icon(
+                Icons.logout,
+                color: Colors.red,
+              ),
+              title: const Text(
+                "Log Out",
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
+              onTap: _logout,
             ),
 
             const SizedBox(height: 20),

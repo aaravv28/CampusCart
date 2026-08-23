@@ -1,3 +1,5 @@
+import 'package:campus_cart/features/chat/screens/chat_detail_screen.dart';
+import 'package:campus_cart/features/chat/services/chat_service.dart';
 import 'package:flutter/material.dart';
 import '../../../core/widget/custom_button.dart';
 
@@ -73,10 +75,33 @@ class ItemDetailScreen extends StatelessWidget {
 
             CustomButton(
               text: "Message Seller 💬",
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Messaging feature managed by partner Auth/Chat scope.")),
+              // Inside ItemDetailScreen bottom bar button callback:
+              onPressed: () async {
+                final chatService = ChatService();
+
+                if (item['seller_id'] == chatService.currentUser?.id) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("You cannot message yourself!")),
+                  );
+                  return;
+                }
+
+                final room = await chatService.getOrCreateChatRoom(
+                  listingId: item['id'],
+                  sellerId: item['seller_id'],
                 );
+
+                if (context.mounted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatDetailScreen(
+                        chatRoomId: room['id'],
+                        itemTitle: item['title'] ?? 'Chat',
+                      ),
+                    ),
+                  );
+                }
               },
             ),
           ],

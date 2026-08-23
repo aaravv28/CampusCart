@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../services/listings_service.dart';
 import '../widgets/item_card.dart';
+import 'item_detail_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -9,62 +11,91 @@ class HomeFeedScreen extends StatefulWidget {
 }
 
 class _HomeFeedScreenState extends State<HomeFeedScreen> {
-  final List<String> _categories = ["All", "Textbooks", "Electronics", "Dorm & Furniture", "Lab Gear"];
-  int _selectedCategoryIndex = 0;
+  final ListingsService _listingsService = ListingsService();
+  late Future<List<Map<String, dynamic>>> _listingsFuture;
 
-  final List<Map<String, String>> _mockItems = [
-    {"title": "Data Structures & Algos", "price": "45", "courseCode": "CS201", "condition": "Like New"},
-    {"title": "TI-84 Plus Calculator", "price": "60", "courseCode": "MATH102", "condition": "Good"},
-    {"title": "Organic Chemistry 8th Ed", "price": "30", "courseCode": "CHEM210", "condition": "Fair"},
-    {"title": "Mini Fridge 3.2 Cu. Ft.", "price": "85", "courseCode": "DORM", "condition": "Good"},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _refreshListings();
+  }
+
+  void _refreshListings() {
+    setState(() {
+      _listingsFuture = _listingsService.getListings();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Campus Cart 🎓", style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [IconButton(icon: const Icon(Icons.notifications_none), onPressed: () {})],
+        title: const Text(
+          "CampusCart 🛒",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F52BA)),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshListings,
+          ),
+        ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: "Search textbooks, CS101...",
-                prefixIcon: const Icon(Icons.search),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                fillColor: Colors.grey.shade100,
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 50,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              itemCount: _categories.length,
-              itemBuilder: (context, index) {
-                final isSelected = _selectedCategoryIndex == index;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: ChoiceChip(
-                    label: Text(_categories[index]),
-                    selected: isSelected,
-                    onSelected: (selected) => setState(() => _selectedCategoryIndex = index),
-                    selectedColor: Theme.of(context).primaryColor,
-                    labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+      body: RefreshIndicator(
+        onRefresh: () async => _refreshListings(),
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _listingsFuture,
+          builder: (context, snapshot) {
+            // 1. Loading State
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            // 2. Error State
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("Error loading items: ${snapshot.error}"),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _refreshListings,
+                      child: const Text("Retry"),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final items = snapshot.data ?? [];
+
+            // 3. Empty State
+            if (items.isEmpty) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Container(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  alignment: Alignment.center,
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.storefront_outlined, size: 64, color: Colors.grey),
+                      SizedBox(height: 12),
+                      Text("No items listed yet!", style: TextStyle(color: Colors.grey, fontSize: 16)),
+                      SizedBox(height: 4),
+                      Text("Be the first to post something to sell.", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
                   ),
-                );
-              },
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                ),
+              );
+            }
+
+            // 4. Data Success State Grid
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: GridView.builder(
-                itemCount: _mockItems.length,
+                itemCount: items.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   childAspectRatio: 0.75,
@@ -72,18 +103,27 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   mainAxisSpacing: 12,
                 ),
                 itemBuilder: (context, index) {
-                  final item = _mockItems[index];
+                  final item = items[index];
                   return ItemCard(
-                    title: item["title"]!,
-                    price: item["price"]!,
-                    courseCode: item["courseCode"]!,
-                    condition: item["condition"]!,
+                    title: item['title'] ?? 'No Title',
+                    price: item['price']?.toString() ?? '0',
+                    courseCode: item['course_code'] ?? 'GENERAL',
+                    condition: item['condition'] ?? 'Good',
+                    imageUrl: item['image_url'],
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ItemDetailScreen(item: item),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

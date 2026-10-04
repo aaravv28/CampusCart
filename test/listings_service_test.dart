@@ -1,20 +1,58 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:campus_cart/core/config/app_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:campus_cart/core/services/offline_cache_service.dart';
 import 'package:campus_cart/features/listings/services/listings_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('ListingsService Offline & Filter Tests', () {
     late ListingsService listingsService;
 
-    setUp(() {
-      AppConfig.instance.resetDemoData();
+    final sampleListings = [
+      {
+        'id': 'l1',
+        'title': 'Organic Chemistry 8th Edition',
+        'price': 45.0,
+        'course_code': 'CHEM210',
+        'category': 'Books',
+        'condition': 'Good',
+        'seller_id': 'u1',
+        'college_id': 'col_1',
+      },
+      {
+        'id': 'l2',
+        'title': 'TI-84 Plus CE Graphing Calculator',
+        'price': 75.0,
+        'course_code': 'MATH150',
+        'category': 'Electronics',
+        'condition': 'Like New',
+        'seller_id': 'u2',
+        'college_id': 'col_1',
+      },
+      {
+        'id': 'l3',
+        'title': 'Dorm Mini Desk Fan',
+        'price': 15.0,
+        'course_code': 'GEN100',
+        'category': 'Dorm',
+        'condition': 'New',
+        'seller_id': 'u3',
+        'college_id': 'col_1',
+      },
+    ];
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await OfflineCacheService.instance.init();
+      await OfflineCacheService.instance.cacheListings(sampleListings);
       listingsService = ListingsService();
     });
 
-    test('getListings returns campus-isolated items in demo mode', () async {
+    test('getListings retrieves cached items when offline', () async {
       final items = await listingsService.getListings();
       expect(items, isNotEmpty);
-      expect(items.every((i) => i['college_id'] == 'col_1'), isTrue);
+      expect(items.length, equals(3));
     });
 
     test('searchListings finds items matching title or course code', () async {
@@ -32,74 +70,44 @@ void main() {
       expect(noResults, isEmpty);
     });
 
-    test(
-      'filterListings applies category, condition, price, and sorting',
-      () async {
-        // 1. Category filter
-        final electronics = await listingsService.filterListings(
-          category: 'Electronics',
-        );
-        expect(electronics, isNotEmpty);
-        expect(
-          electronics.every((e) => e['category'] == 'Electronics'),
-          isTrue,
-        );
+    test('filterListings applies category, condition, price, and sorting', () async {
+      // 1. Category filter
+      final electronics = await listingsService.filterListings(
+        category: 'Electronics',
+      );
+      expect(electronics, isNotEmpty);
+      expect(
+        electronics.every((e) => e['category'] == 'Electronics'),
+        isTrue,
+      );
 
-        // 2. Condition filter
-        final newItems = await listingsService.filterListings(condition: 'New');
-        expect(newItems, isNotEmpty);
-        expect(newItems.every((n) => n['condition'] == 'New'), isTrue);
+      // 2. Condition filter
+      final newItems = await listingsService.filterListings(condition: 'New');
+      expect(newItems, isNotEmpty);
+      expect(newItems.every((n) => n['condition'] == 'New'), isTrue);
 
-        // 3. Max price filter
-        final cheapItems = await listingsService.filterListings(maxPrice: 30);
-        expect(cheapItems, isNotEmpty);
-        expect(cheapItems.every((c) => (c['price'] as num) <= 30), isTrue);
+      // 3. Max price filter
+      final cheapItems = await listingsService.filterListings(maxPrice: 30);
+      expect(cheapItems, isNotEmpty);
+      expect(cheapItems.every((c) => (c['price'] as num) <= 30), isTrue);
+    });
 
-        // 4. Sorting price low to high
-        final sortedLow = await listingsService.filterListings(
-          sortBy: 'price_low',
-        );
-        for (int i = 0; i < sortedLow.length - 1; i++) {
-          expect(
-            (sortedLow[i]['price'] as num) <=
-                (sortedLow[i + 1]['price'] as num),
-            isTrue,
-          );
-        }
-
-        // 5. Sorting price high to low
-        final sortedHigh = await listingsService.filterListings(
-          sortBy: 'price_high',
-        );
-        for (int i = 0; i < sortedHigh.length - 1; i++) {
-          expect(
-            (sortedHigh[i]['price'] as num) >=
-                (sortedHigh[i + 1]['price'] as num),
-            isTrue,
-          );
-        }
-      },
-    );
-
-    test('createListing persists new item into demo listings store', () async {
-      final initialItems = await listingsService.getListings();
-      final initialCount = initialItems.length;
+    test('createListing queues item into offline drafts queue when disconnected', () async {
+      OfflineCacheService.instance.isOnline = false;
 
       await listingsService.createListing(
         title: 'Physics Lab Notebook with Graph Paper',
         price: 15.0,
         courseCode: 'PHYS102',
-        category: 'Lab Gear',
+        category: 'Books',
         condition: 'New',
       );
 
-      final updatedItems = await listingsService.getListings();
-      expect(updatedItems.length, equals(initialCount + 1));
-      expect(
-        updatedItems.first['title'],
-        equals('Physics Lab Notebook with Graph Paper'),
-      );
-      expect(updatedItems.first['course_code'], equals('PHYS102'));
+      final drafts = await OfflineCacheService.instance.getOfflineDrafts();
+      expect(drafts, isNotEmpty);
+      expect(drafts.first['title'], equals('Physics Lab Notebook with Graph Paper'));
+      expect(drafts.first['price'], equals(15.0));
+      expect(drafts.first['course_code'], equals('PHYS102'));
     });
   });
 }

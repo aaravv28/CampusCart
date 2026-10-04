@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widget/demo_badge.dart';
 import '../../../core/widget/empty_view.dart';
 import '../../../core/widget/error_view.dart';
+import '../../../core/widget/offline_banner.dart';
 import '../../ai_assistant/screens/ai_shopping_copilot_screen.dart';
+import '../../colleges/services/college_service.dart';
 import '../services/listings_service.dart';
 import '../widgets/item_card.dart';
 import 'item_detail_screen.dart';
@@ -34,10 +34,23 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     {"label": "Lab Gear", "icon": Icons.biotech_rounded},
   ];
 
+  String _collegeName = "Dharmsinh Desai University";
+  final CollegeService _collegeService = CollegeService();
+
   @override
   void initState() {
     super.initState();
+    _loadCollege();
     _fetchData();
+  }
+
+  void _loadCollege() async {
+    final profile = await _collegeService.getCurrentUserProfile();
+    if (profile != null && profile['colleges'] != null && profile['colleges']['name'] != null) {
+      if (mounted) {
+        setState(() => _collegeName = profile['colleges']['name']);
+      }
+    }
   }
 
   void _fetchData({String query = ''}) {
@@ -86,9 +99,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final collegeName =
-        AppConfig.instance.currentDemoUser?['colleges']?['name'] ??
-        'Dharmsinh Desai University';
+    final collegeName = _collegeName;
 
     return Scaffold(
       backgroundColor: AppTheme.bgLight,
@@ -123,7 +134,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           ],
         ),
         actions: [
-          const DemoBadge(),
+          const ConnectionStatusChip(),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: "Refresh Feed",
@@ -135,10 +146,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1200),
-          child: Column(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 1. Campus Identity Banner
@@ -523,6 +538,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
           ),
         ),
       ),
-    );
+    ),
+  ],
+),
+);
   }
 }

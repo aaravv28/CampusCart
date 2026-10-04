@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/services/offline_cache_service.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../../core/widget/custom_button.dart';
 import '../../../core/widget/custom_text_field.dart';
-import '../../../core/widget/demo_badge.dart';
+import '../../../core/widget/offline_banner.dart';
 import '../services/listings_service.dart';
 
 class AddItemScreen extends StatefulWidget {
@@ -200,10 +201,15 @@ class _AddItemScreenState extends State<AddItemScreen> {
       );
 
       if (mounted) {
+        final isOnline = OfflineCacheService.instance.isOnline;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Item posted successfully! 🎉"),
-            backgroundColor: Color(0xFF059669),
+          SnackBar(
+            content: Text(
+              isOnline
+                  ? "Item posted to campus marketplace! 🎉"
+                  : "Saved to offline drafts! Will publish when connected. ⚡",
+            ),
+            backgroundColor: const Color(0xFF059669),
           ),
         );
         _titleController.clear();
@@ -238,15 +244,19 @@ class _AddItemScreenState extends State<AddItemScreen> {
           "Sell an Item 🏷️",
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
         ),
-        actions: const [DemoBadge()],
+        actions: const [ConnectionStatusChip()],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF1D4ED8)),
-                )
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Color(0xFF1D4ED8)),
+                      )
               : SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20.0,
@@ -570,7 +580,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
                     ),
                   ),
                 ),
-        ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../core/config/app_config.dart';
+import '../../../core/services/offline_cache_service.dart';
 import '../../../core/utils/app_logger.dart';
 
 /// Structured response model from the AI Shopping Assistant
@@ -65,11 +65,12 @@ class AiShoppingAssistantService {
     required String query,
     List<Map<String, dynamic>>? availableListings,
   }) async {
-    final listings = availableListings ?? AppConfig.instance.demoListings;
+    final listings = availableListings ??
+        await OfflineCacheService.instance.getCachedListings();
     final apiKey = _geminiApiKey;
 
-    // If API key is present and not explicitly offline demo mode, attempt Gemini API
-    if (apiKey != null && !AppConfig.instance.isDemoMode) {
+    // If API key is present and device is online, attempt Gemini API
+    if (apiKey != null && OfflineCacheService.instance.isOnline) {
       try {
         final geminiResponse = await _callGeminiApi(
           query: query,

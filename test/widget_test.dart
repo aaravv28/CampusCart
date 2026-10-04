@@ -1,76 +1,111 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:campus_cart/core/config/app_config.dart';
-import 'package:campus_cart/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:campus_cart/core/services/offline_cache_service.dart';
+import 'package:campus_cart/features/auth/screens/login_screen.dart';
+import 'package:campus_cart/navigation/main_navigation_shell.dart';
 
 void main() {
-  setUp(() {
-    AppConfig.instance.resetDemoData();
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await OfflineCacheService.instance.init();
   });
 
-  testWidgets('CampusCart Full Navigation & Offline Presentation Smoke Test', (
-    WidgetTester tester,
-  ) async {
-    // 1. Start with logged-out demo state to verify LoginScreen
-    AppConfig.instance.logoutDemoUser();
+  group('CampusCart Widget & Navigation Smoke Tests', () {
+    testWidgets('LoginScreen renders real login controls and validates input', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(const CampusCartApp());
-    await tester.pumpAndSettle();
+      // Verify Login Screen UI elements
+      expect(find.text('CampusCart 👋'), findsOneWidget);
+      expect(find.text('Campus Email'), findsOneWidget);
+      expect(find.text('Password'), findsOneWidget);
+      expect(find.text('Log In'), findsOneWidget);
+      expect(find.text('Forgot Password?'), findsOneWidget);
+      expect(find.text('New to CampusCart? Create an Account'), findsOneWidget);
 
-    // Verify Login Screen UI elements
-    expect(find.text('CampusCart 👋'), findsOneWidget);
-    expect(find.text('Log In'), findsOneWidget);
-    expect(find.text('Quick Demo Login (Offline Ready)'), findsOneWidget);
+      // Verify submission validation
+      await tester.ensureVisible(find.text('Log In'));
+      await tester.tap(find.text('Log In'));
+      await tester.pumpAndSettle();
+      expect(find.text('Please enter your campus email'), findsOneWidget);
+    });
 
-    // 2. Perform Quick Demo Login
-    await tester.tap(find.text('Quick Demo Login (Offline Ready)'));
-    await tester.pumpAndSettle();
+    testWidgets('LoginScreen navigates to Forgot Password and toggles registration mode', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+      await tester.pumpAndSettle();
 
-    // 3. Verify Landing on MainNavigationShell & Home Feed
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Search'), findsOneWidget);
-    expect(find.text('CartAI'), findsOneWidget);
-    expect(find.text('Sell'), findsOneWidget);
-    expect(find.text('Messages'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
-    expect(find.text('CampusCart 🛒'), findsOneWidget);
-    expect(find.text('DEMO MODE'), findsWidgets);
+      // 1. Navigate to Forgot Password
+      await tester.ensureVisible(find.text('Forgot Password?'));
+      await tester.tap(find.text('Forgot Password?'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reset Password'), findsOneWidget);
 
-    // Verify marketplace items render properly
-    expect(find.textContaining('Organic Chemistry'), findsOneWidget);
+      // Return back to Login
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      expect(find.text('CampusCart 👋'), findsOneWidget);
 
-    // 4. Switch to CartAI tab
-    await tester.tap(find.byIcon(Icons.auto_awesome_outlined));
-    await tester.pumpAndSettle();
-    expect(find.text('CartAI Copilot'), findsOneWidget);
+      // 2. Toggle to Sign Up mode
+      await tester.ensureVisible(find.text('New to CampusCart? Create an Account'));
+      await tester.tap(find.text('New to CampusCart? Create an Account'));
+      await tester.pumpAndSettle();
+      expect(find.text('Campus Registration 🎓'), findsOneWidget);
+      expect(find.text('Create Account'), findsOneWidget);
 
-    // 5. Switch to Search tab
-    await tester.tap(find.byIcon(Icons.search_outlined));
-    await tester.pumpAndSettle();
+      // 3. Toggle back to Log In mode
+      await tester.ensureVisible(find.text('Already registered? Log In'));
+      await tester.tap(find.text('Already registered? Log In'));
+      await tester.pumpAndSettle();
+      expect(find.text('CampusCart 👋'), findsOneWidget);
+    });
 
-    expect(find.text('Explore & Filter 🔍'), findsOneWidget);
-    expect(find.text('Textbooks'), findsOneWidget);
-    expect(find.text('Electronics'), findsOneWidget);
+    testWidgets('MainNavigationShell renders all tabs and switches destinations', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: MainNavigationShell()),
+      );
+      await tester.pumpAndSettle();
 
-    // 5. Switch to Sell tab
-    await tester.tap(find.byIcon(Icons.add_circle_outline));
-    await tester.pumpAndSettle();
+      // Verify all 6 navigation bar destinations
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Search'), findsOneWidget);
+      expect(find.text('CartAI'), findsOneWidget);
+      expect(find.text('Sell'), findsOneWidget);
+      expect(find.text('Messages'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
 
-    expect(find.text('Sell an Item 🏷️'), findsOneWidget);
-    expect(find.text('Post Listing'), findsOneWidget);
+      // Switch to Search tab
+      await tester.tap(find.text('Search'));
+      await tester.pumpAndSettle();
+      expect(find.text('Explore & Filter 🔍'), findsOneWidget);
 
-    // 6. Switch to Messages tab
-    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
-    await tester.pumpAndSettle();
+      // Switch to CartAI tab
+      await tester.tap(find.text('CartAI'));
+      await tester.pumpAndSettle();
+      expect(find.text('CartAI Copilot'), findsOneWidget);
 
-    expect(find.text('Campus Chats 💬'), findsOneWidget);
+      // Switch to Sell tab
+      await tester.tap(find.text('Sell'));
+      await tester.pumpAndSettle();
+      expect(find.text('Sell an Item 🏷️'), findsOneWidget);
 
-    // 7. Switch to Profile tab
-    await tester.tap(find.byIcon(Icons.person_outline));
-    await tester.pumpAndSettle();
+      // Switch to Messages tab
+      await tester.tap(find.text('Messages'));
+      await tester.pumpAndSettle();
+      expect(find.text('Campus Chats 💬'), findsOneWidget);
 
-    expect(find.text('My Profile 👤'), findsOneWidget);
-    expect(find.text('Alex Johnson'), findsOneWidget);
-    expect(find.text('Reset Demo Presentation Data'), findsOneWidget);
+      // Switch to Profile tab
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+      expect(find.text('My Profile 👤'), findsOneWidget);
+    });
   });
 }

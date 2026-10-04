@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/app_config.dart';
+import 'core/services/offline_cache_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/app_logger.dart';
 import 'features/auth/screens/auth_gate.dart';
@@ -71,20 +72,19 @@ void main() async {
         url: supabaseUrl,
         publishableKey: supabaseAnonKey,
       );
-      AppConfig.instance.isDemoMode = false;
+      AppConfig.instance.isOnline = true;
       AppLogger.info('Supabase initialized successfully');
     } else {
-      AppLogger.warning(
-        'Missing Supabase credentials in .env, defaulting to Offline Demo Mode',
-      );
-      AppConfig.instance.isDemoMode = true;
+      AppLogger.warning('Missing Supabase credentials in .env');
+      AppConfig.instance.isOnline = false;
     }
   } catch (e) {
-    AppLogger.warning(
-      'Supabase initialization failed, falling back to Offline Demo Mode: $e',
-    );
-    AppConfig.instance.isDemoMode = true;
+    AppLogger.warning('Supabase initialization network warning: $e');
+    AppConfig.instance.isOnline = false;
   }
+
+  // 3. Initialize Persistent Offline Cache (colleges, favorites, drafts)
+  await OfflineCacheService.instance.init();
 
   runApp(const CampusCartApp());
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/widget/demo_badge.dart';
 import '../../../core/widget/empty_view.dart';
 import '../../../core/widget/error_view.dart';
+import '../../../core/widget/offline_banner.dart';
 import '../../../core/widget/safe_item_image.dart';
 import '../services/chat_service.dart';
 import 'chat_detail_screen.dart';
@@ -38,14 +38,18 @@ class _ChatListScreenState extends State<ChatListScreen> {
           "Campus Chats 💬",
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
         ),
-        actions: const [DemoBadge()],
+        actions: const [ConnectionStatusChip()],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 860),
-          child: RefreshIndicator(
-            color: const Color(0xFF1D4ED8),
-            onRefresh: () async => _loadRooms(),
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 860),
+                child: RefreshIndicator(
+                  color: const Color(0xFF1D4ED8),
+                  onRefresh: () async => _loadRooms(),
             child: FutureBuilder<List<Map<String, dynamic>>>(
               future: _roomsFuture,
               builder: (context, snapshot) {
@@ -210,6 +214,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
           ),
         ),
       ),
-    );
+    ),
+  ],
+),
+);
   }
 }

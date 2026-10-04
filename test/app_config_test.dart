@@ -1,98 +1,119 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:campus_cart/core/config/app_config.dart';
+import 'package:campus_cart/core/services/offline_cache_service.dart';
 
 void main() {
-  group('AppConfig & Offline Demo Store Tests', () {
-    setUp(() {
-      AppConfig.instance.resetDemoData();
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('OfflineCacheService & AppConfig Tests', () {
+    late OfflineCacheService cache;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      cache = OfflineCacheService.instance;
+      await cache.init();
     });
 
-    test('Initializes with default demo data and demo mode enabled', () {
-      expect(AppConfig.instance.isDemoMode, isTrue);
-      expect(AppConfig.instance.currentDemoUser, isNotNull);
-      expect(
-        AppConfig.instance.currentDemoUser?['email'],
-        equals('alex.johnson@ddu.ac.in'),
-      );
-      expect(AppConfig.instance.demoColleges.length, greaterThanOrEqualTo(5));
-      expect(AppConfig.instance.demoListings.length, greaterThanOrEqualTo(8));
-      expect(AppConfig.instance.demoChatRooms.length, greaterThanOrEqualTo(2));
+    test('AppConfig metadata and campus safe trade zones are valid', () {
+      expect(AppConfig.appName, equals('CampusCart'));
+      expect(AppConfig.campusSafeTradeZones, isNotEmpty);
+      expect(AppConfig.campusSafeTradeZones.first['name'], contains('Library'));
+      expect(AppConfig.campusSafeTradeZones.first['safety_level'], isNotNull);
     });
 
-    test('addDemoListing adds item to beginning of demo listings', () {
-      final initialCount = AppConfig.instance.demoListings.length;
-      AppConfig.instance.addDemoListing({
-        'id': 'test_list_999',
-        'title': 'Test Item Title',
-        'price': 99.0,
-        'course_code': 'TEST101',
-        'category': 'Electronics',
-        'condition': 'New',
-        'college_id': 'col_1',
-      });
+    test('Connection status defaults and toggles properly', () {
+      cache.isOnline = true;
+      expect(cache.isOnline, isTrue);
+      expect(AppConfig.instance.isOnline, isTrue);
 
-      expect(AppConfig.instance.demoListings.length, equals(initialCount + 1));
-      expect(
-        AppConfig.instance.demoListings.first['title'],
-        equals('Test Item Title'),
-      );
+      cache.isOnline = false;
+      expect(cache.isOnline, isFalse);
+      expect(AppConfig.instance.isOnline, isFalse);
     });
 
-    test('updateDemoProfile alters current demo user profile', () {
-      AppConfig.instance.updateDemoProfile(
-        name: 'Jordan Smith',
-        department: 'Electrical Engineering',
-        graduationYear: '2028',
-      );
-
-      final user = AppConfig.instance.currentDemoUser;
-      expect(user?['full_name'], equals('Jordan Smith'));
-      expect(user?['department'], equals('Electrical Engineering'));
-      expect(user?['graduation_year'], equals('2028'));
+    test('Colleges fallback returns official universities when cache empty', () async {
+      final colleges = await cache.getCachedColleges();
+      expect(colleges, isNotEmpty);
+      expect(colleges.first['name'], contains('Dharmsinh Desai University'));
     });
 
-    test('resetDemoData restores original pre-seeded state', () {
-      AppConfig.instance.addDemoListing({
-        'id': 'temporary_item',
-        'title': 'Temporary',
-        'price': 10.0,
-      });
-      AppConfig.instance.updateDemoProfile(name: 'Changed Name');
+    test('Colleges can be cached and retrieved', () async {
+      final customColleges = [
+        {'id': 'c1', 'name': 'Tech University', 'domain': 'tech.edu'},
+      ];
+      await cache.cacheColleges(customColleges);
 
-      AppConfig.instance.resetDemoData();
-
-      expect(
-        AppConfig.instance.currentDemoUser?['full_name'],
-        equals('Alex Johnson'),
-      );
-      expect(
-        AppConfig.instance.demoListings.any((l) => l['id'] == 'temporary_item'),
-        isFalse,
-      );
+      final retrieved = await cache.getCachedColleges();
+      expect(retrieved.length, equals(1));
+      expect(retrieved.first['name'], equals('Tech University'));
     });
 
-    test(
-      'sendDemoMessage and getDemoMessagesStream receive real-time updates',
-      () async {
-        final stream = AppConfig.instance.getDemoMessagesStream('room_1');
-        final expectation = expectLater(
-          stream,
-          emitsThrough(
-            predicate<List<Map<String, dynamic>>>(
-              (msgs) => msgs.any(
-                (m) => m['content'] == 'Offline presentation test message',
-              ),
-            ),
-          ),
-        );
+    test('Listings can be cached and retrieved', () async {
+      final sampleListings = [
+        {
+          'id': 'list_1',
+          'title': 'Calculus 3rd Edition',
+          'price': 45.0,
+          'course_code': 'MATH101',
+          'category': 'Books',
+        }
+      ];
+      await cache.cacheListings(sampleListings);
 
-        AppConfig.instance.sendDemoMessage(
-          chatRoomId: 'room_1',
-          content: 'Offline presentation test message',
-        );
+      final cached = await cache.getCachedListings();
+      expect(cached.length, equals(1));
+      expect(cached.first['title'], equals('Calculus 3rd Edition'));
+    });
 
-        await expectation;
-      },
-    );
+    test('Favorites can be toggled and checked synchronously', () async {
+      const listingId = 'item_fav_123';
+      expect(cache.isFavorite(listingId), isFalse);
+
+      final toggledOn = await cache.toggleFavorite(listingId);
+      expect(toggledOn, isTrue);
+      expect(cache.isFavorite(listingId), isTrue);
+
+      final toggledOff = await cache.toggleFavorite(listingId);
+      expect(toggledOff, isFalse);
+      expect(cache.isFavorite(listingId), isFalse);
+    });
+
+    test('Offline draft listings queue supports save, retrieval, and removal', () async {
+      final draft = {
+        'id': 'draft_100',
+        'title': 'Dorm Desk Fan',
+        'price': 15.0,
+        'category': 'Dorm Essentials',
+        'condition': 'Like New',
+        'course_code': '',
+      };
+
+      await cache.saveOfflineDraft(draft);
+      final drafts = await cache.getOfflineDrafts();
+      expect(drafts.length, equals(1));
+      expect(drafts.first['title'], equals('Dorm Desk Fan'));
+
+      await cache.removeOfflineDraft('draft_100');
+      final emptyDrafts = await cache.getOfflineDrafts();
+      expect(emptyDrafts, isEmpty);
+    });
+
+    test('User profile can be cached and cleared on logout', () async {
+      final profile = {
+        'id': 'user_abc_123',
+        'email': 'student@ddu.ac.in',
+        'full_name': 'Aarav Patel',
+        'college_id': 'c1',
+      };
+
+      await cache.cacheProfile(profile);
+      final retrieved = await cache.getCachedProfile();
+      expect(retrieved?['full_name'], equals('Aarav Patel'));
+
+      await cache.clearCachedProfile();
+      final cleared = await cache.getCachedProfile();
+      expect(cleared, isNull);
+    });
   });
 }

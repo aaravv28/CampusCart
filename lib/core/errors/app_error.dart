@@ -79,7 +79,7 @@ class AppError implements Exception {
         errorString.contains('connection closed') ||
         errorString.contains('clientexception')) {
       return AppError(
-        message: 'Network connection error. Please verify your connection or use Demo Mode.',
+        message: 'Network connection error. Please verify your connection or use cached data offline.',
         type: AppErrorType.network,
         technicalDetails: error.toString(),
         originalError: error,

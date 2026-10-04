@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../../core/errors/app_error.dart';
+import '../../../core/services/offline_cache_service.dart';
 import '../../../core/utils/app_logger.dart';
 
 class CollegeService {
@@ -13,26 +13,29 @@ class CollegeService {
     }
   }
 
-  // Fetch all registered colleges
+  /// Fetches all registered colleges. Tries Supabase cloud first and updates local cache,
+  /// seamlessly falling back to cached colleges if offline.
   Future<List<Map<String, dynamic>>> getColleges() async {
-    if (AppConfig.instance.isDemoMode || _supabase == null) {
-      return List<Map<String, dynamic>>.from(AppConfig.instance.demoColleges);
+    final client = _supabase;
+    if (client != null) {
+      try {
+        final response = await client.from('colleges').select().order('name');
+        final colleges = List<Map<String, dynamic>>.from(response);
+        if (colleges.isNotEmpty) {
+          await OfflineCacheService.instance.cacheColleges(colleges);
+        }
+        OfflineCacheService.instance.isOnline = true;
+        return colleges;
+      } catch (e) {
+        AppLogger.warning('Failed to fetch remote colleges, using offline cache: $e');
+        OfflineCacheService.instance.isOnline = false;
+      }
     }
 
-    try {
-      final response = await _supabase!.from('colleges').select().order('name');
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      AppLogger.warning(
-        'Failed to fetch remote colleges, falling back to local list',
-        e,
-      );
-      // Fallback to local offline colleges to ensure UI never breaks
-      return List<Map<String, dynamic>>.from(AppConfig.instance.demoColleges);
-    }
+    return OfflineCacheService.instance.getCachedColleges();
   }
 
-  // Register a new college with its official domain
+  /// Registers a new college with its official student email domain.
   Future<Map<String, dynamic>> registerCollege({
     required String name,
     required String domain,
@@ -44,55 +47,57 @@ class CollegeService {
       throw AppError.validation('College name and domain are required.');
     }
 
-    if (AppConfig.instance.isDemoMode || _supabase == null) {
-      final newCollege = {
-        'id': 'col_${DateTime.now().millisecondsSinceEpoch}',
-        'name': cleanName,
-        'domain': cleanDomain,
-      };
-      AppConfig.instance.addDemoCollege(newCollege);
-      return newCollege;
+    final client = _supabase;
+    if (client == null) {
+      throw AppError.network('Cannot register college without internet connection.');
     }
 
     try {
-      final response = await _supabase!
+      final response = await client
           .from('colleges')
           .insert({'name': cleanName, 'domain': cleanDomain})
           .select()
           .single();
 
-      return response;
+      final newCollege = Map<String, dynamic>.from(response);
+      final currentList = await OfflineCacheService.instance.getCachedColleges();
+      currentList.add(newCollege);
+      await OfflineCacheService.instance.cacheColleges(currentList);
+
+      OfflineCacheService.instance.isOnline = true;
+      return newCollege;
     } catch (e) {
       AppLogger.error('CollegeService.registerCollege failed', e);
       throw AppError.fromException(e);
     }
   }
 
-  // Get current user's profile and college ID
+  /// Retrieves the current user's profile with college affiliation.
   Future<Map<String, dynamic>?> getCurrentUserProfile() async {
-    if (AppConfig.instance.isDemoMode || _supabase == null) {
-      return AppConfig.instance.currentDemoUser;
-    }
+    final client = _supabase;
+    final user = client?.auth.currentUser;
 
-    try {
-      final user = _supabase?.auth.currentUser;
-      if (user == null) {
-        return AppConfig.instance.currentDemoUser;
+    if (client != null && user != null) {
+      try {
+        final response = await client
+            .from('profiles')
+            .select('*, colleges(*)')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (response != null) {
+          final profileMap = Map<String, dynamic>.from(response);
+          await OfflineCacheService.instance.cacheProfile(profileMap);
+          OfflineCacheService.instance.isOnline = true;
+          return profileMap;
+        }
+      } catch (e) {
+        AppLogger.warning('Failed to fetch remote profile, reading offline cache: $e');
+        OfflineCacheService.instance.isOnline = false;
       }
-
-      final response = await _supabase!
-          .from('profiles')
-          .select('*, colleges(*)')
-          .eq('id', user.id)
-          .maybeSingle();
-
-      return response ?? AppConfig.instance.currentDemoUser;
-    } catch (e) {
-      AppLogger.warning(
-        'Failed to fetch remote profile, falling back to local profile',
-        e,
-      );
-      return AppConfig.instance.currentDemoUser;
     }
+
+    // Offline or network error fallback
+    return OfflineCacheService.instance.getCachedProfile();
   }
 }

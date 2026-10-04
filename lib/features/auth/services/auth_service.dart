@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../../core/errors/app_error.dart';
+import '../../../core/services/offline_cache_service.dart';
 import '../../../core/utils/app_logger.dart';
 
 class AuthService {
@@ -15,18 +15,6 @@ class AuthService {
   }
 
   User? get currentUser {
-    if (AppConfig.instance.isDemoMode) {
-      final demoUser = AppConfig.instance.currentDemoUser;
-      if (demoUser == null) return null;
-      return User(
-        id: demoUser['id'] as String,
-        appMetadata: const {},
-        userMetadata: {'full_name': demoUser['full_name']},
-        aud: 'authenticated',
-        createdAt: DateTime.now().toIso8601String(),
-      );
-    }
-
     try {
       return _supabase?.auth.currentUser;
     } catch (e) {
@@ -36,16 +24,6 @@ class AuthService {
   }
 
   Session? get currentSession {
-    if (AppConfig.instance.isDemoMode) {
-      if (AppConfig.instance.currentDemoUser != null) {
-        return Session(
-          accessToken: 'demo_token',
-          tokenType: 'bearer',
-          user: currentUser!,
-        );
-      }
-      return null;
-    }
     try {
       return _supabase?.auth.currentSession;
     } catch (_) {
@@ -57,14 +35,13 @@ class AuthService {
 
   Stream<AuthState> get authStateChanges {
     final client = _supabase;
-    if (client != null && !AppConfig.instance.isDemoMode) {
+    if (client != null) {
       return client.auth.onAuthStateChange;
     }
-    // Return empty or dummy stream for demo mode
     return const Stream.empty();
   }
 
-  /// Sign Up and create matching profile with college_id
+  /// Real Supabase Sign Up: registers auth credentials and creates profile row.
   Future<AuthResponse> signUp({
     required String email,
     required String password,
@@ -72,42 +49,38 @@ class AuthService {
     required String collegeId,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
-    final isExplicitDemo =
-        cleanEmail == 'demo@example.com' || cleanEmail.startsWith('demo@');
 
-    if (_supabase == null || isExplicitDemo) {
-      AppLogger.info('Demo Mode: Simulating user registration for $email');
-      AppConfig.instance.loginDemoUser(email);
-      AppConfig.instance.updateDemoProfile(name: fullName);
-      final user = currentUser!;
-      return AuthResponse(user: user);
+    if (_supabase == null) {
+      throw AppError.network(
+        'Backend connection not available. Please check internet connection.',
+      );
     }
 
     try {
       final response = await _supabase!.auth.signUp(
-        email: email,
+        email: cleanEmail,
         password: password,
         data: {'full_name': fullName, 'college_id': collegeId},
       );
 
       final user = response.user;
       if (user != null) {
-        // If Supabase has email confirmation enabled and email already exists,
-        // it returns a dummy User object with identities = [] to prevent user enumeration.
         if (user.identities != null && user.identities!.isEmpty) {
           throw AppError.authentication(
             'This campus email is already registered. Please switch to Log In or use "Forgot Password".',
           );
         }
 
-        // Upsert user profile (safely ignore errors if table has RLS requiring confirmed session or triggers)
+        // Upsert user profile in public.profiles table
         try {
-          await _supabase!.from('profiles').upsert({
+          final profileData = {
             'id': user.id,
-            'full_name': fullName,
-            'email': email,
+            'full_name': fullName.trim(),
+            'email': cleanEmail,
             'college_id': collegeId,
-          });
+          };
+          await _supabase!.from('profiles').upsert(profileData);
+          await OfflineCacheService.instance.cacheProfile(profileData);
         } catch (profileErr) {
           AppLogger.warning('Profile creation warning on signup: $profileErr');
           final errStr = profileErr.toString();
@@ -119,7 +92,7 @@ class AuthService {
         }
       }
 
-      AppConfig.instance.isDemoMode = false;
+      OfflineCacheService.instance.isOnline = true;
       return response;
     } catch (e) {
       if (e is AppError) rethrow;
@@ -128,40 +101,40 @@ class AuthService {
     }
   }
 
+  /// Real Supabase Sign In with email & password.
   Future<AuthResponse> signIn({
     required String email,
     required String password,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
-    final isExplicitDemo =
-        cleanEmail == 'demo@example.com' || cleanEmail.startsWith('demo@');
 
-    if (_supabase == null || isExplicitDemo) {
-      AppLogger.info(
-        'Demo Mode: Signing in with campus demo account ($cleanEmail)',
+    if (_supabase == null) {
+      throw AppError.network(
+        'Backend connection not available. Internet connection required to log in.',
       );
-      AppConfig.instance.loginDemoUser(cleanEmail);
-      final user = currentUser!;
-      return AuthResponse(user: user);
     }
 
     try {
       final response = await _supabase!.auth.signInWithPassword(
-        email: email,
+        email: cleanEmail,
         password: password,
       );
-      AppConfig.instance.isDemoMode = false;
 
-      // Ensure profile exists for this authenticated user
       if (response.user != null) {
         try {
+          // Fetch existing profile to populate local cache
           final profile = await _supabase!
               .from('profiles')
-              .select('id')
+              .select('id, full_name, email, college_id')
               .eq('id', response.user!.id)
               .maybeSingle();
 
-          if (profile == null) {
+          if (profile != null) {
+            await OfflineCacheService.instance.cacheProfile(
+              Map<String, dynamic>.from(profile),
+            );
+          } else {
+            // Create default profile if missing
             final domain = cleanEmail.split('@').last;
             final colleges = await _supabase!
                 .from('colleges')
@@ -171,20 +144,23 @@ class AuthService {
                 ? colleges.first['id'] as String?
                 : null;
 
-            await _supabase!.from('profiles').insert({
+            final newProfile = {
               'id': response.user!.id,
               'full_name':
                   response.user!.userMetadata?['full_name'] ??
                   cleanEmail.split('@').first,
               'email': cleanEmail,
               'college_id': ?cId,
-            });
+            };
+            await _supabase!.from('profiles').insert(newProfile);
+            await OfflineCacheService.instance.cacheProfile(newProfile);
           }
         } catch (profileErr) {
           AppLogger.warning('Profile sync warning on login: $profileErr');
         }
       }
 
+      OfflineCacheService.instance.isOnline = true;
       return response;
     } catch (e) {
       AppLogger.error('AuthService.signIn failed', e);
@@ -192,15 +168,14 @@ class AuthService {
     }
   }
 
+  /// Sends Supabase password reset email with recovery link.
   Future<void> sendPasswordResetEmail(String email) async {
     final cleanEmail = email.trim().toLowerCase();
-    if (_supabase == null ||
-        cleanEmail == 'demo@example.com' ||
-        cleanEmail.startsWith('demo@')) {
-      AppLogger.info(
-        'Demo Mode: Simulating password reset email for $cleanEmail',
+
+    if (_supabase == null) {
+      throw AppError.network(
+        'Internet connection required to request a password reset email.',
       );
-      return;
     }
 
     try {
@@ -215,12 +190,14 @@ class AuthService {
       AppLogger.info(
         'Password reset email requested for $cleanEmail (redirect: $redirectTo)',
       );
+      OfflineCacheService.instance.isOnline = true;
     } catch (e) {
       AppLogger.error('AuthService.sendPasswordResetEmail failed', e);
       throw AppError.fromException(e);
     }
   }
 
+  /// Updates authenticated user password.
   Future<UserResponse> updatePassword(String newPassword) async {
     if (!hasActiveSession) {
       throw AppError.authentication(
@@ -228,11 +205,10 @@ class AuthService {
       );
     }
 
-    if (_supabase == null || AppConfig.instance.isDemoMode) {
-      AppLogger.info('Demo Mode: Simulating password update');
-      AppConfig.instance.updateDemoUserPassword(newPassword);
-      final user = currentUser;
-      return UserResponse.fromJson(user?.toJson() ?? {});
+    if (_supabase == null) {
+      throw AppError.network(
+        'Internet connection required to update password.',
+      );
     }
 
     try {
@@ -240,6 +216,7 @@ class AuthService {
         UserAttributes(password: newPassword),
       );
       AppLogger.info('User password successfully updated');
+      OfflineCacheService.instance.isOnline = true;
       return response;
     } catch (e) {
       AppLogger.error('AuthService.updatePassword failed', e);
@@ -247,23 +224,18 @@ class AuthService {
     }
   }
 
+  /// Verifies recovery OTP code or token from reset email.
   Future<AuthResponse> verifyRecoveryOtp({
     String? email,
     String? token,
     String? tokenHash,
   }) async {
     final cleanEmail = email?.trim().toLowerCase();
-    if (_supabase == null || AppConfig.instance.isDemoMode) {
-      AppLogger.info(
-        'Demo Mode: Simulating recovery OTP verification for $cleanEmail',
+
+    if (_supabase == null) {
+      throw AppError.network(
+        'Internet connection required to verify recovery code.',
       );
-      if (cleanEmail != null && cleanEmail.isNotEmpty) {
-        AppConfig.instance.loginDemoUser(cleanEmail);
-      } else {
-        AppConfig.instance.loginDemoUser();
-      }
-      final user = currentUser!;
-      return AuthResponse(user: user);
     }
 
     try {
@@ -273,7 +245,7 @@ class AuthService {
         tokenHash: tokenHash?.trim(),
         type: OtpType.recovery,
       );
-      AppConfig.instance.isDemoMode = false;
+      OfflineCacheService.instance.isOnline = true;
       return response;
     } catch (e) {
       AppLogger.error('AuthService.verifyRecoveryOtp failed', e);
@@ -283,7 +255,7 @@ class AuthService {
 
   /// Attempts to exchange a deep link or URI containing auth parameters for an active session.
   Future<AuthSessionUrlResponse?> exchangeCodeOrUri(Uri uri) async {
-    if (_supabase == null || AppConfig.instance.isDemoMode) {
+    if (_supabase == null) {
       return null;
     }
 
@@ -320,13 +292,13 @@ class AuthService {
     return null;
   }
 
+  /// Signs out of Supabase and clears cached user profile.
   Future<void> signOut() async {
-    AppConfig.instance.logoutDemoUser();
-    AppConfig.instance.isDemoMode = false;
+    await OfflineCacheService.instance.clearCachedProfile();
     try {
       await _supabase?.auth.signOut();
     } catch (e) {
-      AppLogger.warning('Supabase signOut error ignored', e);
+      AppLogger.warning('Supabase signOut error ignored: $e');
     }
   }
 }

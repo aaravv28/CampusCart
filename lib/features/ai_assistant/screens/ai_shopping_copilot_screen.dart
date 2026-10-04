@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/config/app_config.dart';
+import '../../../core/services/offline_cache_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widget/safe_item_image.dart';
+import '../../auth/services/auth_service.dart';
 import '../../listings/screens/item_detail_screen.dart';
+import '../../listings/services/listings_service.dart';
 import '../services/ai_shopping_assistant_service.dart';
 
 /// Message model for conversational shopping copilot
@@ -37,8 +39,11 @@ class _AiShoppingCopilotScreenState extends State<AiShoppingCopilotScreen> {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final AiShoppingAssistantService _aiService = AiShoppingAssistantService();
+  final ListingsService _listingsService = ListingsService();
+  final AuthService _authService = AuthService();
 
   final List<CopilotMessage> _messages = [];
+  List<Map<String, dynamic>> _availableListings = [];
   bool _isThinking = false;
 
   final List<String> _quickPrompts = [
@@ -53,19 +58,42 @@ class _AiShoppingCopilotScreenState extends State<AiShoppingCopilotScreen> {
   @override
   void initState() {
     super.initState();
+    _loadListingsAndSeed();
+  }
+
+  void _loadListingsAndSeed() async {
+    final cached = await OfflineCacheService.instance.getCachedListings();
+    if (mounted) {
+      setState(() {
+        _availableListings = cached;
+      });
+    }
     _seedWelcomeMessage();
+
+    // Refresh listings from cloud/cache
+    try {
+      final fresh = await _listingsService.getListings();
+      if (mounted && fresh.isNotEmpty) {
+        setState(() {
+          _availableListings = fresh;
+        });
+      }
+    } catch (_) {}
   }
 
   void _seedWelcomeMessage() {
+    final user = _authService.currentUser;
+    final userName = (user?.userMetadata?['full_name'] as String?)?.split(' ').first ?? 'there';
+
     _messages.add(
       CopilotMessage(
         sender: 'ai',
         text:
-            "👋 **Hi Alex! I'm CartAI, your personal campus shopping copilot.**\n\n"
+            "👋 **Hi $userName! I'm CartAI, your personal campus shopping copilot.**\n\n"
             "Tell me what courses you're taking, what gear you need, or your budget. "
             "I'll instantly scan student listings across your university, find the best prices, and help you save money!\n\n"
             "Tap any quick suggestion below or ask me anything.",
-        recommendedListings: AppConfig.instance.demoListings.take(2).toList(),
+        recommendedListings: _availableListings.take(2).toList(),
         followUps: [
           "Calculators for MATH150",
           "CHEM210 Organic Chemistry book",
@@ -94,7 +122,7 @@ class _AiShoppingCopilotScreenState extends State<AiShoppingCopilotScreen> {
     try {
       final response = await _aiService.askAssistant(
         query: query,
-        availableListings: AppConfig.instance.demoListings,
+        availableListings: _availableListings,
       );
 
       if (!mounted) return;
@@ -121,9 +149,7 @@ class _AiShoppingCopilotScreenState extends State<AiShoppingCopilotScreen> {
           CopilotMessage(
             sender: 'ai',
             text: "⚠️ I ran into a minor hiccup analyzing that query. Here are the top items available right now on campus:",
-            recommendedListings: AppConfig.instance.demoListings
-                .take(2)
-                .toList(),
+            recommendedListings: _availableListings.take(2).toList(),
             isOfflineEngine: true,
           ),
         );

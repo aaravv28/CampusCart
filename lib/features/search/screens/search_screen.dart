@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widget/demo_badge.dart';
 import '../../../core/widget/empty_view.dart';
 import '../../../core/widget/error_view.dart';
+import '../../../core/widget/offline_banner.dart';
 import '../../listings/screens/item_detail_screen.dart';
 import '../../listings/services/listings_service.dart';
 import '../../listings/widgets/item_card.dart';
@@ -108,12 +108,16 @@ class _SearchScreenState extends State<SearchScreen> {
             letterSpacing: -0.4,
           ),
         ),
-        actions: const [DemoBadge()],
+        actions: const [ConnectionStatusChip()],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1200),
-          child: Column(
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Column(
             children: [
               // 1. Keyword Search Input & Filter Button
               Padding(
@@ -458,7 +462,10 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
       ),
-    );
+    ),
+  ],
+),
+);
   }
 
   Widget _buildFilterTag(String label, VoidCallback onRemove) {

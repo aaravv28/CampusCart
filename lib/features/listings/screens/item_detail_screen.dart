@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/errors/app_error.dart';
+import '../../../core/services/offline_cache_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widget/custom_button.dart';
-import '../../../core/widget/demo_badge.dart';
+import '../../../core/widget/offline_banner.dart';
 import '../../../core/widget/safe_item_image.dart';
 import '../../ai_assistant/services/ai_shopping_assistant_service.dart';
 import '../../chat/screens/chat_detail_screen.dart';
@@ -22,7 +23,7 @@ class ItemDetailScreen extends StatefulWidget {
 
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
   bool _isConnecting = false;
-  late bool _isFav;
+  bool _isFav = false;
   late Map<String, dynamic> _item;
   final ListingsService _listingsService = ListingsService();
   final AiShoppingAssistantService _aiService = AiShoppingAssistantService();
@@ -32,16 +33,23 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   void initState() {
     super.initState();
     _item = Map<String, dynamic>.from(widget.item);
-    final id = _item['id']?.toString();
-    _isFav = id != null && AppConfig.instance.isFavorite(id);
     _dealAnalysis = _aiService.analyzeListingDeal(_item);
+    _loadFavoriteState();
   }
 
-  void _toggleFav() {
+  void _loadFavoriteState() {
     final id = _item['id']?.toString();
     if (id != null) {
-      setState(() => _isFav = !_isFav);
-      AppConfig.instance.toggleFavorite(id);
+      final isFav = OfflineCacheService.instance.isFavorite(id);
+      if (mounted) setState(() => _isFav = isFav);
+    }
+  }
+
+  void _toggleFav() async {
+    final id = _item['id']?.toString();
+    if (id != null) {
+      final newFav = await OfflineCacheService.instance.toggleFavorite(id);
+      if (mounted) setState(() => _isFav = newFav);
     }
   }
 
@@ -62,7 +70,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     try {
       final room = await chatService.getOrCreateChatRoom(
         listingId: _item['id']?.toString() ?? 'item_unknown',
-        sellerId: sellerId ?? 'seller_demo',
+        sellerId: sellerId ?? '',
       );
 
       if (!mounted) return;
@@ -173,7 +181,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             tooltip: _isFav ? "Saved" : "Save Item",
             onPressed: _toggleFav,
           ),
-          const DemoBadge(),
+          const ConnectionStatusChip(),
         ],
       ),
       body: Center(
@@ -732,7 +740,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
   /// Campus Safe Trade Hubs Card
   Widget _buildSafeTradeZonesCard() {
-    final zones = AppConfig.instance.demoSafeTradeZones;
+    final zones = AppConfig.campusSafeTradeZones;
 
     return Container(
       padding: const EdgeInsets.all(16),

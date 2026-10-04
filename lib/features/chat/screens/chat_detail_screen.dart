@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/widget/demo_badge.dart';
 import '../../../core/widget/error_view.dart';
+import '../../../core/widget/offline_banner.dart';
 import '../../../core/widget/safe_item_image.dart';
 import '../services/chat_service.dart';
 
@@ -110,13 +110,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           overflow: TextOverflow.ellipsis,
         ),
-        actions: const [DemoBadge()],
+        actions: const [ConnectionStatusChip()],
       ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 860),
           child: Column(
             children: [
+              const OfflineBanner(),
               // 1. Top Item Banner
               if (widget.listingItem != null) ...[
                 Container(

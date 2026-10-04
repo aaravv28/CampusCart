@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/config/app_config.dart';
 import '../../../core/errors/app_error.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_logger.dart';
-import '../../../core/widget/demo_badge.dart';
+import '../../../core/widget/offline_banner.dart';
 import '../../../navigation/main_navigation_shell.dart';
 import '../../colleges/services/college_service.dart';
 import '../services/auth_service.dart';
@@ -19,10 +18,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(
-    text: 'alex.johnson@ddu.ac.in',
-  );
-  final _passwordController = TextEditingController(text: 'demo123');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
 
   final AuthService _authService = AuthService();
@@ -60,18 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       });
     } catch (e) {
-      AppLogger.warning(
-        "Error loading colleges, fallback to demo colleges: $e",
-      );
-      if (!mounted) return;
-      setState(() {
-        _colleges = List<Map<String, dynamic>>.from(
-          AppConfig.instance.demoColleges,
-        );
-        if (_colleges.isNotEmpty) {
-          _selectedCollege = _colleges.first;
-        }
-      });
+      AppLogger.warning("Error loading colleges: $e");
     }
   }
 
@@ -90,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
               controller: nameController,
               decoration: const InputDecoration(
                 labelText: "College Name",
-                hintText: "e.g., Nirma University",
+                hintText: "e.g., Dharmsinh Desai University",
               ),
             ),
             const SizedBox(height: 12),
@@ -98,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
               controller: domainController,
               decoration: const InputDecoration(
                 labelText: "Email Domain",
-                hintText: "e.g., nirmauni.ac.in",
+                hintText: "e.g., ddu.ac.in",
               ),
             ),
           ],
@@ -144,29 +130,13 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _enterDemoMode() {
-    AppConfig.instance.loginDemoUser('alex.johnson@ddu.ac.in');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text("Logged in as Alex Johnson (Offline Demo Mode) 🎓"),
-        duration: const Duration(seconds: 2),
-        backgroundColor: AppTheme.primaryIris,
-      ),
-    );
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const MainNavigationShell()),
-      (route) => false,
-    );
-  }
-
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (_isSignUp && _selectedCollege == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please select or register your college."),
+          content: Text("Please select your college."),
         ),
       );
       return;
@@ -184,12 +154,10 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (!mounted) return;
 
-        if (res.session != null || AppConfig.instance.isDemoMode) {
+        if (res.session != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                "Account created successfully! Welcome to CampusCart 🎉",
-              ),
+              content: Text("Account created successfully! Welcome to CampusCart 🎉"),
               backgroundColor: Color(0xFF059669),
             ),
           );
@@ -199,15 +167,15 @@ class _LoginScreenState extends State<LoginScreen> {
             (route) => false,
           );
         } else {
-          // Email confirmation is required by Supabase
+          // If Supabase email confirmation is enabled
           setState(() => _isSignUp = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                "Account created! Please check your campus email to verify, then log in.",
+                "Account created! Please check your campus inbox to confirm your email, then log in.",
               ),
               backgroundColor: Color(0xFF059669),
-              duration: Duration(seconds: 5),
+              duration: Duration(seconds: 6),
             ),
           );
         }
@@ -230,6 +198,7 @@ class _LoginScreenState extends State<LoginScreen> {
         SnackBar(
           content: Text(appError.message),
           backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 4),
         ),
       );
     } finally {
@@ -246,332 +215,315 @@ class _LoginScreenState extends State<LoginScreen> {
         toolbarHeight: 44,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: const [DemoBadge()],
+        actions: const [ConnectionStatusChip()],
       ),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24.0,
-              vertical: 8.0,
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Brand Icon
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.heroGradient,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.primaryIris.withValues(
-                                alpha: 0.3,
-                              ),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.school_rounded,
-                          size: 38,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Title
-                    Text(
-                      _isSignUp ? "Campus Registration 🎓" : "CampusCart 👋",
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _isSignUp
-                          ? "Join your college's trusted student marketplace"
-                          : "Log in with your official university credentials",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    if (_isSignUp) ...[
-                      // College Selector Dropdown
-                      const Text(
-                        "Select Your University",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
+        child: Column(
+          children: [
+            const OfflineBanner(),
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 8.0,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 460),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child:
-                                DropdownButtonFormField<Map<String, dynamic>>(
-                                  initialValue: _selectedCollege,
-                                  isExpanded: true,
-                                  decoration: InputDecoration(
-                                    fillColor: Colors.white,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 10,
+                          // Brand Icon
+                          Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                gradient: AppTheme.heroGradient,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.primaryIris.withValues(
+                                      alpha: 0.3,
                                     ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
                                   ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.school_rounded,
+                                size: 38,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Title
+                          Text(
+                            _isSignUp ? "Campus Registration 🎓" : "CampusCart 👋",
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _isSignUp
+                                ? "Sign up with your official university credentials"
+                                : "The trusted marketplace for college students",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // College Picker (Sign Up Only)
+                          if (_isSignUp) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  "Select Your University",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF334155),
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: _showAddCollegeDialog,
+                                  icon: const Icon(Icons.add_circle_outline, size: 14),
+                                  label: const Text(
+                                    "Add College",
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<Map<String, dynamic>>(
+                                  value: _selectedCollege,
+                                  isExpanded: true,
+                                  hint: const Text("Select your university"),
+                                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
                                   items: _colleges.map((c) {
-                                    return DropdownMenuItem(
+                                    return DropdownMenuItem<Map<String, dynamic>>(
                                       value: c,
                                       child: Text(
-                                        c['name'] ?? '',
+                                        "${c['name']} (@${c['domain']})",
                                         overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 13),
                                       ),
                                     );
                                   }).toList(),
-                                  onChanged: (val) =>
-                                      setState(() => _selectedCollege = val),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setState(() => _selectedCollege = val);
+                                    }
+                                  },
                                 ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryLight,
-                              borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.add_business_rounded,
+                            const SizedBox(height: 14),
+
+                            // Full Name Field (Sign Up Only)
+                            TextFormField(
+                              controller: _nameController,
+                              textCapitalization: TextCapitalization.words,
+                              decoration: InputDecoration(
+                                labelText: "Full Name",
+                                hintText: "Alex Johnson",
+                                prefixIcon: const Icon(Icons.person_outline_rounded),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) {
+                                  return "Please enter your full name";
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+
+                          // Email Field
+                          TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: InputDecoration(
+                              labelText: "Campus Email",
+                              hintText: _isSignUp
+                                  ? "student@$requiredDomain"
+                                  : "student@ddu.ac.in",
+                              prefixIcon: const Icon(Icons.alternate_email_rounded),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) {
+                                return "Please enter your campus email";
+                              }
+                              if (!val.contains('@')) {
+                                return "Please enter a valid email address";
+                              }
+                              if (_isSignUp &&
+                                  _selectedCollege != null &&
+                                  !val.toLowerCase().endsWith(
+                                        _selectedCollege!['domain']
+                                            .toString()
+                                            .toLowerCase(),
+                                      )) {
+                                return "Must use official campus domain (@${_selectedCollege!['domain']})";
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Password Field
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            decoration: InputDecoration(
+                              labelText: "Password",
+                              hintText: "••••••••",
+                              prefixIcon: const Icon(Icons.lock_outline_rounded),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() => _obscurePassword = !_obscurePassword);
+                                },
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.isEmpty) {
+                                return "Please enter your password";
+                              }
+                              if (val.length < 6) {
+                                return "Password must be at least 6 characters";
+                              }
+                              return null;
+                            },
+                          ),
+
+                          // Forgot Password Link (Login Only)
+                          if (!_isSignUp) ...[
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const ForgotPasswordScreen(),
+                                    ),
+                                  );
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                    horizontal: 6,
+                                  ),
+                                ),
+                                child: const Text(
+                                  "Forgot Password?",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.primaryIris,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ] else
+                            const SizedBox(height: 20),
+
+                          // Submit Action Button
+                          ElevatedButton(
+                            onPressed: _isLoading ? null : _submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryIris,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              elevation: 2,
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    _isSignUp ? "Create Account" : "Log In",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Toggle Login / SignUp
+                          TextButton(
+                            onPressed: () => setState(() => _isSignUp = !_isSignUp),
+                            child: Text(
+                              _isSignUp
+                                  ? "Already registered? Log In"
+                                  : "New to CampusCart? Create an Account",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                                 color: AppTheme.primaryIris,
                               ),
-                              tooltip: "Register New College",
-                              onPressed: _showAddCollegeDialog,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: InputDecoration(
-                          labelText: "Full Name",
-                          hintText: "Alex Johnson",
-                          prefixIcon: const Icon(Icons.person_outline_rounded),
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? "Name required"
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-
-                    // Email Input
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        labelText: _isSignUp
-                            ? "Official Email (@$requiredDomain)"
-                            : "Campus Email",
-                        hintText: "alex.johnson@ddu.ac.in",
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return "Email required";
-                        }
-                        final email = v.trim().toLowerCase();
-                        if (!email.contains('@')) {
-                          return "Enter a valid email address";
-                        }
-                        if (_isSignUp && !email.endsWith('@$requiredDomain')) {
-                          return "Email must end with @$requiredDomain";
-                        }
-                        return null;
-                      },
                     ),
-                    const SizedBox(height: 12),
-
-                    // Password Input
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: "Password",
-                        prefixIcon: const Icon(Icons.lock_outline_rounded),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off_rounded
-                                : Icons.visibility_rounded,
-                            size: 20,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                        ),
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      validator: (v) => v == null || v.length < 6
-                          ? "Minimum 6 characters"
-                          : null,
-                    ),
-
-                    // Forgot Password link (when logging in)
-                    if (!_isSignUp) ...[
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ForgotPasswordScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            "Forgot Password?",
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ] else
-                      const SizedBox(height: 8),
-
-                    // Submit Button
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryIris,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      onPressed: _isLoading ? null : _submit,
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              _isSignUp ? "Sign Up" : "Log In",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 6),
-
-                    // Toggle Login / SignUp
-                    TextButton(
-                      onPressed: () => setState(() => _isSignUp = !_isSignUp),
-                      child: Text(
-                        _isSignUp
-                            ? "Already registered? Log In"
-                            : "New to CampusCart? Register Here",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-
-                    const Divider(height: 20),
-
-                    // Quick Demo Login for presentations / offline testing
-                    OutlinedButton.icon(
-                      onPressed: _enterDemoMode,
-                      icon: const Icon(
-                        Icons.play_circle_outline_rounded,
-                        color: AppTheme.primaryIris,
-                      ),
-                      label: const Text(
-                        "Quick Demo Login (Offline Ready)",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.primaryIris,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        side: const BorderSide(
-                          color: AppTheme.primaryIris,
-                          width: 1.5,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Pre-loaded with sample textbooks, calculators, and chats.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

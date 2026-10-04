@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/config/app_config.dart';
+import '../../../core/services/offline_cache_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widget/safe_item_image.dart';
 
@@ -38,7 +38,7 @@ class _ItemCardState extends State<ItemCard> {
   @override
   void initState() {
     super.initState();
-    _isFav = widget.id != null && AppConfig.instance.isFavorite(widget.id!);
+    _isFav = widget.id != null && OfflineCacheService.instance.isFavorite(widget.id!);
   }
 
   void _toggleFav() {
@@ -46,7 +46,7 @@ class _ItemCardState extends State<ItemCard> {
       setState(() {
         _isFav = !_isFav;
       });
-      AppConfig.instance.toggleFavorite(widget.id!);
+      OfflineCacheService.instance.toggleFavorite(widget.id!);
     }
   }
 

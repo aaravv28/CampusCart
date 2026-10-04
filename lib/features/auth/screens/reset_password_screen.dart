@@ -4,7 +4,7 @@ import '../../../core/errors/app_error.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widget/custom_button.dart';
 import '../../../core/widget/custom_text_field.dart';
-import '../../../core/widget/demo_badge.dart';
+import '../../../core/widget/offline_banner.dart';
 import '../../../navigation/main_navigation_shell.dart';
 import '../services/auth_service.dart';
 import 'forgot_password_screen.dart';
@@ -163,13 +163,17 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Set New Password"),
-        actions: const [DemoBadge()],
+        actions: const [ConnectionStatusChip()],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
             child: Form(
               key: _formKey,
               child: Column(
@@ -434,6 +438,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
         ),
       ),
-    );
+    ),
+  ],
+),
+);
   }
 }

@@ -74,14 +74,8 @@ class AuthService {
           } catch (signInErr) {
             final errStr = signInErr.toString().toLowerCase();
             if (errStr.contains('email not confirmed')) {
-              try {
-                await _supabase!.auth.resend(
-                  type: OtpType.signup,
-                  email: cleanEmail,
-                );
-              } catch (_) {}
               throw AppError.authentication(
-                'An account with this email exists in Supabase Authentication, but email verification is pending. We just re-sent a confirmation link to $cleanEmail. Please check your inbox/spam, or disable "Confirm email" in Supabase Dashboard.',
+                'An account with this email exists, but was created when email verification was enabled. Please turn OFF "Confirm email" in Supabase Dashboard (Authentication -> Providers -> Email) to sign in instantly without verification.',
               );
             }
             throw AppError.authentication(

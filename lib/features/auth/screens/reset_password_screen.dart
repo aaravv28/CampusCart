@@ -12,8 +12,13 @@ import 'login_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final VoidCallback? onPasswordReset;
+  final String? initialEmail;
 
-  const ResetPasswordScreen({super.key, this.onPasswordReset});
+  const ResetPasswordScreen({
+    super.key,
+    this.onPasswordReset,
+    this.initialEmail,
+  });
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -21,21 +26,58 @@ class ResetPasswordScreen extends StatefulWidget {
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _emailController;
+  final _tokenController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _tokenController = TextEditingController();
   final AuthService _authService = AuthService();
 
   bool _isLoading = false;
-  bool _showTokenFallback = false;
+  bool _isCheckingUri = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(
+      text: widget.initialEmail ?? _authService.currentUser?.email ?? '',
+    );
+    _checkInitialUri();
+  }
+
+  Future<void> _checkInitialUri() async {
+    if (_authService.hasActiveSession) return;
+
+    try {
+      final uri = Uri.base;
+      if (uri.queryParameters.containsKey('code') ||
+          uri.queryParameters.containsKey('token_hash') ||
+          uri.fragment.contains('access_token')) {
+        setState(() => _isCheckingUri = true);
+        await _authService.exchangeCodeOrUri(uri);
+        if (mounted) {
+          setState(() {
+            _isCheckingUri = false;
+            if (_authService.currentUser?.email != null) {
+              _emailController.text = _authService.currentUser!.email!;
+            }
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isCheckingUri = false);
+    }
+  }
 
   @override
   void dispose() {
+    _emailController.dispose();
+    _tokenController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _tokenController.dispose();
     super.dispose();
   }
+
+  bool get _hasSession => _authService.hasActiveSession;
 
   void _handleResetPassword() async {
     if (!_formKey.currentState!.validate()) {
@@ -48,17 +90,24 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // If user is entering a recovery OTP code manually because link didn't sign in
-      if (_showTokenFallback && _tokenController.text.trim().isNotEmpty) {
-        final email = _authService.currentUser?.email;
-        if (email != null && email.isNotEmpty) {
-          await _authService.verifyRecoveryOtp(
-            email: email,
-            token: _tokenController.text.trim(),
+      // 1. If not authenticated yet, authenticate with the email & recovery token
+      if (!_hasSession) {
+        final email = _emailController.text.trim();
+        final token = _tokenController.text.trim();
+
+        if (token.isEmpty) {
+          throw AppError.validation(
+            "Please enter the 6-digit recovery code from your student email.",
           );
         }
+
+        await _authService.verifyRecoveryOtp(
+          email: email,
+          token: token,
+        );
       }
 
+      // 2. Now update the password with the active session
       await _authService.updatePassword(_passwordController.text.trim());
 
       if (!mounted) return;
@@ -109,7 +158,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final user = _authService.currentUser;
-    final userEmail = user?.email;
+    final userEmail = user?.email ?? _emailController.text;
 
     return Scaffold(
       appBar: AppBar(
@@ -161,14 +210,39 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   const SizedBox(height: 8),
 
                   Text(
-                    "Choose a strong, secure password for your campus marketplace account.",
+                    _hasSession
+                        ? "Your reset link has been verified! Choose a strong password to secure your account."
+                        : "Enter your campus email, the recovery code from your email, and choose your new password.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 16),
 
-                  // Display Verified Account Info if available
-                  if (userEmail != null && userEmail.isNotEmpty)
+                  if (_isCheckingUri)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            "Verifying recovery link...",
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Display Verified Account Info if session is active
+                  if (_hasSession && userEmail.isNotEmpty) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -192,7 +266,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                              userEmail,
+                              "$userEmail (Verified via Link)",
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
@@ -204,10 +278,60 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                         ],
                       ),
                     ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+                  ] else if (!_hasSession) ...[
+                    // When no active session, show Email and Recovery Code fields
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1D4ED8).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFF1D4ED8).withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: Color(0xFF1D4ED8),
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "Check your student email for the 6-digit recovery code or tap the link in the email.",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF1E3A8A),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                  // Optional recovery OTP code input if user has a code
-                  if (_showTokenFallback) ...[
+                    CustomTextField(
+                      label: "Campus Email",
+                      hint: "alex.johnson@ddu.ac.in",
+                      controller: _emailController,
+                      prefixIcon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (!_hasSession) {
+                          if (value == null || value.trim().isEmpty) {
+                            return "Campus email required";
+                          }
+                          if (!value.contains('@')) {
+                            return "Enter a valid campus email";
+                          }
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
                     CustomTextField(
                       label: "6-Digit Recovery Code",
                       hint: "123456",
@@ -215,14 +339,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       prefixIcon: Icons.pin_outlined,
                       keyboardType: TextInputType.number,
                       validator: (value) {
-                        if (_showTokenFallback &&
-                            (value == null || value.trim().isEmpty)) {
-                          return "Enter the 6-digit recovery code from your email";
+                        if (!_hasSession) {
+                          if (value == null || value.trim().isEmpty) {
+                            return "Enter the 6-digit recovery code from your email";
+                          }
                         }
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                   ],
 
                   // New Password Field
@@ -242,7 +367,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
                   // Confirm Password Field
                   CustomTextField(
@@ -265,41 +390,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
                   // Submit Button
                   CustomButton(
-                    text: _isLoading
-                        ? "Updating Password..."
-                        : "Update Password",
+                    text: _isLoading ? "Updating Password..." : "Update Password",
                     isLoading: _isLoading,
                     onPressed: _handleResetPassword,
                   ),
-                  const SizedBox(height: 12),
 
-                  // Token fallback toggle
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _showTokenFallback = !_showTokenFallback;
-                      });
-                    },
-                    icon: Icon(
-                      _showTokenFallback
-                          ? Icons.check_circle_outline_rounded
-                          : Icons.password_rounded,
-                      size: 16,
-                      color: AppTheme.primaryIris,
-                    ),
-                    label: Text(
-                      _showTokenFallback
-                          ? "Hide Recovery Code Field"
-                          : "Have a 6-digit reset code from email?",
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.primaryIris,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-
-                  const Divider(height: 24),
+                  const Divider(height: 28),
 
                   // Navigation actions
                   Wrap(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:campus_cart/core/config/app_config.dart';
+import 'package:campus_cart/core/errors/app_error.dart';
 import 'package:campus_cart/features/auth/screens/forgot_password_screen.dart';
 import 'package:campus_cart/features/auth/screens/reset_password_screen.dart';
 import 'package:campus_cart/features/auth/services/auth_service.dart';
@@ -38,6 +39,20 @@ void main() {
           token: '123456',
         );
         expect(otpResponse.user, isNotNull);
+      },
+    );
+
+    test(
+      'AuthService throws AppError if updatePassword is called without active session',
+      () async {
+        final authService = AuthService();
+        AppConfig.instance.logoutDemoUser();
+        expect(authService.hasActiveSession, isFalse);
+
+        expect(
+          () => authService.updatePassword('newPassword123'),
+          throwsA(isA<AppError>()),
+        );
       },
     );
 
@@ -150,6 +165,60 @@ void main() {
         // Verify we navigated to ResetPasswordScreen
         expect(find.text('Create New Password 🔑'), findsOneWidget);
         expect(find.text('Update Password'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'ResetPasswordScreen requires email and OTP when unauthenticated and updates password',
+      (WidgetTester tester) async {
+        // Log out demo user so there is no active session
+        AppConfig.instance.logoutDemoUser();
+        bool resetCalled = false;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ResetPasswordScreen(
+              initialEmail: 'student@ddu.ac.in',
+              onPasswordReset: () {
+                resetCalled = true;
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Check unauthenticated fields are present
+        expect(find.text('Campus Email'), findsOneWidget);
+        expect(find.text('6-Digit Recovery Code'), findsOneWidget);
+        expect(find.text('New Password'), findsOneWidget);
+        expect(find.text('Confirm New Password'), findsOneWidget);
+
+        // Find the 4 text fields
+        final textFields = find.byType(TextFormField);
+        expect(textFields, findsNWidgets(4));
+
+        // 1. Leave recovery code empty and submit
+        await tester.enterText(textFields.at(2), 'campusSecure2026!');
+        await tester.enterText(textFields.at(3), 'campusSecure2026!');
+        await tester.ensureVisible(find.text('Update Password'));
+        await tester.tap(find.text('Update Password'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Enter the 6-digit recovery code from your email'),
+          findsOneWidget,
+        );
+
+        // 2. Fill in recovery code and submit
+        await tester.enterText(textFields.at(1), '123456');
+        await tester.ensureVisible(find.text('Update Password'));
+        await tester.tap(find.text('Update Password'));
+        await tester.pumpAndSettle();
+
+        expect(resetCalled, isTrue);
+        expect(
+          AppConfig.instance.currentDemoUser?['password'],
+          equals('campusSecure2026!'),
+        );
       },
     );
   });

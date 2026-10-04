@@ -179,6 +179,16 @@ class AppError implements Exception {
       );
     }
 
+    if (errorString.contains('auth session missing') ||
+        errorString.contains('authsessionmissingexception')) {
+      return AppError(
+        message: 'No active reset session found. Please enter your campus email and the 6-digit recovery code from your email, or request a new reset link.',
+        type: AppErrorType.authentication,
+        technicalDetails: error.toString(),
+        originalError: error,
+      );
+    }
+
     // Generic fallback
     return AppError(
       message: 'Something went wrong. Please try again.',

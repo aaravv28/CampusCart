@@ -35,6 +35,26 @@ class AuthService {
     }
   }
 
+  Session? get currentSession {
+    if (AppConfig.instance.isDemoMode) {
+      if (AppConfig.instance.currentDemoUser != null) {
+        return Session(
+          accessToken: 'demo_token',
+          tokenType: 'bearer',
+          user: currentUser!,
+        );
+      }
+      return null;
+    }
+    try {
+      return _supabase?.auth.currentSession;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool get hasActiveSession => currentSession != null;
+
   Stream<AuthState> get authStateChanges {
     final client = _supabase;
     if (client != null && !AppConfig.instance.isDemoMode) {
@@ -202,6 +222,12 @@ class AuthService {
   }
 
   Future<UserResponse> updatePassword(String newPassword) async {
+    if (!hasActiveSession) {
+      throw AppError.authentication(
+        'No active password reset session was found. Please enter your campus email and the 6-digit recovery code from your email to update your password.',
+      );
+    }
+
     if (_supabase == null || AppConfig.instance.isDemoMode) {
       AppLogger.info('Demo Mode: Simulating password update');
       AppConfig.instance.updateDemoUserPassword(newPassword);
@@ -222,15 +248,20 @@ class AuthService {
   }
 
   Future<AuthResponse> verifyRecoveryOtp({
-    required String email,
-    required String token,
+    String? email,
+    String? token,
+    String? tokenHash,
   }) async {
-    final cleanEmail = email.trim().toLowerCase();
+    final cleanEmail = email?.trim().toLowerCase();
     if (_supabase == null || AppConfig.instance.isDemoMode) {
       AppLogger.info(
         'Demo Mode: Simulating recovery OTP verification for $cleanEmail',
       );
-      AppConfig.instance.loginDemoUser(cleanEmail);
+      if (cleanEmail != null && cleanEmail.isNotEmpty) {
+        AppConfig.instance.loginDemoUser(cleanEmail);
+      } else {
+        AppConfig.instance.loginDemoUser();
+      }
       final user = currentUser!;
       return AuthResponse(user: user);
     }
@@ -238,7 +269,8 @@ class AuthService {
     try {
       final response = await _supabase!.auth.verifyOTP(
         email: cleanEmail,
-        token: token.trim(),
+        token: token?.trim(),
+        tokenHash: tokenHash?.trim(),
         type: OtpType.recovery,
       );
       AppConfig.instance.isDemoMode = false;
@@ -247,6 +279,45 @@ class AuthService {
       AppLogger.error('AuthService.verifyRecoveryOtp failed', e);
       throw AppError.fromException(e);
     }
+  }
+
+  /// Attempts to exchange a deep link or URI containing auth parameters for an active session.
+  Future<AuthSessionUrlResponse?> exchangeCodeOrUri(Uri uri) async {
+    if (_supabase == null || AppConfig.instance.isDemoMode) {
+      return null;
+    }
+
+    try {
+      final code = uri.queryParameters['code'];
+      if (code != null && code.isNotEmpty) {
+        AppLogger.info('Exchanging auth code from URI for session');
+        return await _supabase!.auth.exchangeCodeForSession(code);
+      }
+
+      final tokenHash = uri.queryParameters['token_hash'];
+      if (tokenHash != null && tokenHash.isNotEmpty) {
+        AppLogger.info('Verifying token_hash from URI for session');
+        final res = await _supabase!.auth.verifyOTP(
+          tokenHash: tokenHash,
+          type: OtpType.recovery,
+        );
+        if (res.session != null) {
+          return AuthSessionUrlResponse(
+            session: res.session!,
+            redirectType: 'recovery',
+          );
+        }
+      }
+
+      final uriStr = uri.toString();
+      if (uriStr.contains('access_token') || uri.fragment.contains('access_token')) {
+        AppLogger.info('Extracting session from URL fragment');
+        return await _supabase!.auth.getSessionFromUrl(uri);
+      }
+    } catch (e) {
+      AppLogger.warning('Failed to exchange code or URI for session: $e');
+    }
+    return null;
   }
 
   Future<void> signOut() async {

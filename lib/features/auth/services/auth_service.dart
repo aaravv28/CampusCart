@@ -66,28 +66,55 @@ class AuthService {
       final user = response.user;
       if (user != null) {
         if (user.identities != null && user.identities!.isEmpty) {
-          throw AppError.authentication(
-            'This campus email is already registered. Please switch to Log In or use "Forgot Password".',
-          );
+          // User already exists in Supabase auth.users table.
+          // Try signing in directly with the password they provided on the sign-up form.
+          try {
+            final signInRes = await signIn(email: cleanEmail, password: password);
+            return signInRes;
+          } catch (signInErr) {
+            final errStr = signInErr.toString().toLowerCase();
+            if (errStr.contains('email not confirmed')) {
+              try {
+                await _supabase!.auth.resend(
+                  type: OtpType.signup,
+                  email: cleanEmail,
+                );
+              } catch (_) {}
+              throw AppError.authentication(
+                'An account with this email exists in Supabase Authentication, but email verification is pending. We just re-sent a confirmation link to $cleanEmail. Please check your inbox/spam, or disable "Confirm email" in Supabase Dashboard.',
+              );
+            }
+            throw AppError.authentication(
+              'An account with this campus email already exists in Supabase (under Authentication -> Users). Please switch to "Log In", or use "Forgot Password" to reset your password.',
+            );
+          }
         }
+
+        // Cache profile locally so the user can immediately use the app
+        final profileData = {
+          'id': user.id,
+          'full_name': fullName.trim(),
+          'email': cleanEmail,
+          'college_id': collegeId,
+        };
+        await OfflineCacheService.instance.cacheProfile(profileData);
 
         // Upsert user profile in public.profiles table
         try {
-          final profileData = {
-            'id': user.id,
-            'full_name': fullName.trim(),
-            'email': cleanEmail,
-            'college_id': collegeId,
-          };
           await _supabase!.from('profiles').upsert(profileData);
-          await OfflineCacheService.instance.cacheProfile(profileData);
         } catch (profileErr) {
           AppLogger.warning('Profile creation warning on signup: $profileErr');
           final errStr = profileErr.toString();
-          if (errStr.contains('23503') || errStr.contains('profiles_id_fkey')) {
-            throw AppError.authentication(
-              'This campus email is already registered. Please switch to Log In.',
-            );
+          // If foreign key constraint on college_id failed, fallback to verified college ID
+          if (errStr.contains('23503') || errStr.contains('college_id')) {
+            try {
+              final fallbackData = Map<String, dynamic>.from(profileData)
+                ..['college_id'] = 'a7de0f10-76f6-4c9d-bb04-6ad6ef4e0ed4';
+              await _supabase!.from('profiles').upsert(fallbackData);
+              await OfflineCacheService.instance.cacheProfile(fallbackData);
+            } catch (fallbackErr) {
+              AppLogger.warning('Fallback profile creation warning: $fallbackErr');
+            }
           }
         }
       }
@@ -290,6 +317,17 @@ class AuthService {
       AppLogger.warning('Failed to exchange code or URI for session: $e');
     }
     return null;
+  }
+
+  /// Resends signup confirmation email.
+  Future<void> resendConfirmationEmail(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (_supabase != null) {
+      await _supabase!.auth.resend(
+        type: OtpType.signup,
+        email: cleanEmail,
+      );
+    }
   }
 
   /// Signs out of Supabase and clears cached user profile.

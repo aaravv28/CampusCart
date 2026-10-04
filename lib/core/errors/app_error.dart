@@ -120,7 +120,7 @@ class AppError implements Exception {
 
     if (errorString.contains('email not confirmed')) {
       return AppError(
-        message: 'Please check your campus inbox to confirm your email before logging in.',
+        message: 'Your campus email is registered in Supabase Authentication, but please confirm your email before logging in. (Tip: Check your spam folder, or disable "Confirm email" in Supabase Dashboard -> Authentication -> Providers -> Email).',
         type: AppErrorType.authentication,
         technicalDetails: error.toString(),
         originalError: error,
@@ -130,7 +130,7 @@ class AppError implements Exception {
     if (errorString.contains('user already registered') ||
         errorString.contains('already exists')) {
       return AppError(
-        message: 'An account with this campus email already exists.',
+        message: 'An account with this campus email already exists in Supabase (under Authentication -> Users). Please switch to "Log In", or reset your password using "Forgot Password".',
         type: AppErrorType.authentication,
         technicalDetails: error.toString(),
         originalError: error,

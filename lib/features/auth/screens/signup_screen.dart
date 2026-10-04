@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/widget/custom_button.dart';
 import '../../../core/widget/custom_text_field.dart';
 import '../../../core/widget/offline_banner.dart';
@@ -48,6 +49,77 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+  void _showConfirmationInfoDialog(String email) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const Icon(Icons.mark_email_read_outlined, color: AppTheme.primaryIris, size: 26),
+            const SizedBox(width: 10),
+            Text("Verify Campus Email", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Your account has been created in Supabase Authentication!",
+              style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "A confirmation link was dispatched to:\n$email",
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: const Text(
+                "💡 Tip: If you don't see the email, check your Spam folder. In Supabase Dashboard, accounts are registered under 'Authentication -> Users'. To enable instant logins without email verification, turn off 'Confirm email' in Supabase Dashboard (Authentication -> Providers -> Email).",
+                style: TextStyle(fontSize: 11, color: Color(0xFF1E40AF)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              try {
+                await _authService.resendConfirmationEmail(email);
+                if (dialogCtx.mounted) {
+                  ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                    const SnackBar(content: Text("Confirmation email re-sent! 🚀")),
+                  );
+                }
+              } catch (_) {}
+            },
+            child: const Text("Resend Link"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryIris,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text("Continue to Log In"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleSignup() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCollege == null) {
@@ -85,16 +157,7 @@ class _SignupScreenState extends State<SignupScreen> {
           (route) => false,
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "Account created! Please check your campus email to confirm, then log in.",
-            ),
-            backgroundColor: Color(0xFF059669),
-            duration: Duration(seconds: 5),
-          ),
-        );
-        Navigator.pop(context);
+        _showConfirmationInfoDialog(_emailController.text.trim());
       }
     } catch (e) {
       if (!mounted) return;

@@ -3,10 +3,10 @@
 
 # Miscellaneous
 *.class
-<<<<<<< HEAD
 *.log
 *.pyc
 *.swp
+*.lock
 .DS_Store
 .atom/
 .build/
@@ -50,13 +50,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
-=======
-*.lock
-*.log
-*.pyc
-*.swp
-.buildlog/
-.history
 
 
 
@@ -168,4 +161,3 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
->>>>>>> 3984d8d4b8f76825dab3702aa5c633a34371c266
